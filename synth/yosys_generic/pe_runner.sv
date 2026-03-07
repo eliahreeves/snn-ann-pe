@@ -1,5 +1,5 @@
 
-module blinky_runner;
+module pe_runner;
 
 logic clk_i;
 logic rst_ni;
@@ -16,9 +16,7 @@ initial begin
     end
 end
 
-blinky #(
-    .CyclesPerToggle(100)
-) blinky (.*);
+pe_sim pe_sim (.*);
 
 always @(posedge led_o) $info("Led on");
 always @(negedge led_o) $info("Led off");

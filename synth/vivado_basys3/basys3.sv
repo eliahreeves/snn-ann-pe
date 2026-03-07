@@ -13,9 +13,9 @@ mmcm_100_to_50 pll (
     .clk_50(clk_50)
 );
 
-blinky #(
+pe #(
     .CyclesPerToggle(5_000_000)
-) blinky (
+) pe (
     .clk_i(clk_50),
     .rst_ni(rst_n),
     .led_o(led[0])

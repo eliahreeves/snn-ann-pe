@@ -26,9 +26,9 @@ SB_PLL40_PAD #(
     .PLLOUTGLOBAL(clk_16)
 );
 
-blinky #(
+pe #(
     .CyclesPerToggle(8_000_000)
-) blinky (
+) pe (
     .clk_i(clk_16),
     .rst_ni(BTN_N),
     .led_o(led)

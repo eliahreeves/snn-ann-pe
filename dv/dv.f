@@ -1,7 +1,7 @@
 
 dv/dv_pkg.sv
 
-dv/blinky_tb.sv
+dv/pe_tb.sv
 
 dv/dpi/example_dpi.c
 

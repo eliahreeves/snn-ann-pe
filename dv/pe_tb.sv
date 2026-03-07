@@ -1,11 +1,11 @@
 
-module blinky_tb
+module pe_tb
     import config_pkg::*;
     import dv_pkg::*;
     ;
 
 import "DPI-C" function void example_dpi();
-blinky_runner blinky_runner ();
+pe_runner pe_runner ();
 
 initial begin
     $dumpfile( "dump.fst" );
@@ -14,11 +14,11 @@ initial begin
     $urandom(100);
     $timeformat( -3, 3, "ms", 0);
 
-    blinky_runner.reset();
+    pe_runner.reset();
 
     repeat(4) begin
-        blinky_runner.wait_for_on();
-        blinky_runner.wait_for_off();
+        pe_runner.wait_for_on();
+        pe_runner.wait_for_off();
     end
 
     $display( "End simulation." );

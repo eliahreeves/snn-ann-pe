@@ -1,2 +1,2 @@
 
-dv/blinky_runner.sv
+dv/pe_runner.sv
