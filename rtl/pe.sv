@@ -169,8 +169,9 @@ module pe
     end else begin
       // don't care about process
       ns_data_out.process = 0;
-      acc_d = ns_data_in.data;
+      adder_input_b = ns_data_in.data;
       adder_input_a = mult_out;
+      acc_d = adder_output;
       ns_data_out.data = acc_q;
     end
   end
