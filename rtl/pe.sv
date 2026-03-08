@@ -11,15 +11,15 @@ module pe
     input logic clk_i,
     input logic rst_ni,
     input logic snn_i,
-    input logic processes_i,
     input logic [TW_WIDTH-1:0] cell_select_i,
+    input logic [I_W-1:0] v_thresh_i,
+    input logic [I_W-1:0] weight_i,
     // spikes/inputs
     input logic [I_W-1:0] a_i,
     output logic [I_W-1:0] a_o,
     //weights/outputs
-    input logic [I_W-1:0] b_i,
-    output logic [I_W-1:0] b_o,
-    input logic [I_W-1:0] v_thresh_i,
+    input logic [O_W:0] b_i,
+    output logic [O_W:0] b_o,
 
     output logic fired_o
 );
@@ -29,6 +29,17 @@ module pe
   localparam MULT_OUT = I_W * 2;
 
   typedef struct packed {logic [TW-1:0][I_W-1:0] cells;} snn_data_t;
+  typedef struct packed {
+    logic [O_W-I_W-1:0] _empty;
+    logic [I_W-1:0] weight;
+  } sum_weight_t;
+  typedef struct packed {
+    logic process;
+    sum_weight_t data;
+  } ns_data_t;
+  ns_data_t ns_data_in, ns_data_out;
+  assign ns_data_in = ns_data_t'(b_i);
+  assign b_o = ns_data_out;
 
   snn_data_t acc_d, acc_q;
 
@@ -43,42 +54,46 @@ module pe
   // *************************************************************
   // Pipeline Buffer NS
   //
-  // Reconfigurable length buffer to deal with mulitplier delay
+  // Reconfigurable length buffer to deal with mulitplier delay.
+  // If in SNN mode add 1 pipeline stage for the spikes, If in ANN mode,
+  // add MULT_STAGES + 1 for inputs.
   // *************************************************************
 
-  logic [MULT_STAGES-1:0][I_W-1:0] buffer_a_q;
+  logic [MULT_STAGES:0][I_W-1:0] buffer_a_q;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       buffer_a_q <= '0;
     end else begin
       buffer_a_q[0] <= a_i;
-      for (int i = 1; i < MULT_STAGES; i++) begin
+      for (int i = 1; i < MULT_STAGES + 1; i++) begin
         buffer_a_q[i] <= buffer_a_q[i-1];
       end
     end
   end
 
-  assign a_o = snn_i ? buffer_a_q[0] : buffer_a_q[MULT_STAGES-1];
+  assign a_o = snn_i ? buffer_a_q[0] : buffer_a_q[MULT_STAGES];
 
   // *************************************************************
   // Pipeline Buffer WE
   //
-  //	
+  // Reconfigurable length buffer to deal with SNN TW delay,	
+  // If in SNN mode add TW pipeline stage for the weights, If in ANN
+  // dat ais flowing through MAC
   // *************************************************************
 
-  logic [I_W:0] buffer_b_q;
+  ns_data_t [TW-1:0] buffer_b_q;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       buffer_b_q <= '0;
     end else begin
-      buffer_b_q <= b_i;
+      buffer_b_q[0] <= ns_data_in;
+      for (int i = 1; i < TW; i++) begin
+        buffer_b_q[i] <= buffer_b_q[i-1];
+      end
     end
   end
-
-
-
 
   // *************************************************************
   // Adder
@@ -112,7 +127,7 @@ module pe
       .clk_i(gated_clk),
       .rst_ni(rst_ni),
       .a_i(en_ann ? a_i : 0),
-      .b_i(en_ann ? b_i : 0),
+      .b_i(weight_i),
       .c_o(mult_out)
   );
 
@@ -127,17 +142,21 @@ module pe
     fired_o = 0;
     // if in SNN mode
     if (snn_i) begin
+      // output weight bundle
+      ns_data_out = buffer_b_q[TW-1];
       // load sums into registers
-      if (~processes_i) begin
-        adder_input_a[I_W-1:0] = a_i[0] ? b_i : 0;
+      if (~ns_data_in.process) begin
+        adder_input_a[I_W-1:0] = a_i[0] ? ns_data_in.data.weight : 0;
         // if in integrate mode, accumulate and saturate
         acc_d.cells[cell_select_i] = adder_output[I_W] == 0 ? adder_output[I_W-1:0] : {I_W{1'b1}};
       end else begin
-        adder_input_b = acc_q.cells[cell_select_i];
+        // change b out to final cell when processing
+        ns_data_out.data.weight = acc_q.cells[TW-1];
+        adder_input_b = O_W'(acc_q.cells[cell_select_i]);
         if (cell_select_i == 0) begin
-          adder_input_a[I_W-1:0] = b_i;
+          adder_input_a[I_W-1:0] = ns_data_in.data.weight;
         end else begin
-          adder_input_a = acc_q.cells[cell_select_i-1];
+          adder_input_a[I_W-1:0] = acc_q.cells[cell_select_i-1];
         end
 
         fired_o = adder_output[I_W:0] >= ((I_W + 1)'(v_thresh_i));
@@ -148,8 +167,11 @@ module pe
         end
       end
     end else begin
+      // don't care about process
+      ns_data_out.process = 0;
+      acc_d = ns_data_in.data;
       adder_input_a = mult_out;
-      acc_d = adder_output;
+      ns_data_out.data = acc_q;
     end
   end
 endmodule
