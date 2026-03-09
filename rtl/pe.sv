@@ -111,24 +111,24 @@ module pe
   // Multiplier
   // *************************************************************
 
-  logic en_ann;
-  logic gated_clk;
-  assign gated_clk = clk_i && en_ann;
-
-  always_latch begin
-    if (!clk_i) begin
-      en_ann = !snn_i;
-    end
-  end
+  // logic en_ann;
+  // logic gated_clk;
+  // assign gated_clk = clk_i && en_ann;
+  //
+  // always_latch begin
+  //   if (!clk_i) begin
+  //     en_ann = !snn_i;
+  //   end
+  // end
 
   logic [MULT_OUT-1:0] mult_out;
   // output valid after MULT_STAGES # of cycles have passed
   simple_mult #(
       .STAGES(MULT_STAGES)
   ) mult (
-      .clk_i(gated_clk),
+      .clk_i(clk_i),
       .rst_ni(rst_ni),
-      .a_i(en_ann ? a_i : 0),
+      .a_i(snn_i ? a_i : 0),
       .b_i(weight_i),
       .c_o(mult_out)
   );
@@ -139,20 +139,19 @@ module pe
 
   always_comb begin
     acc_pipe_d = acc_pipe_q;
+    adder_input_a = 0;
+    adder_input_b = 0;
+    fired_o = 0;
+    ns_data_out = '0;
+
+    // if in SNN mode
     if (snn_i) begin
+      // Set adder_input_b for SNN mode
       if (ns_data_in.signals.flush) begin
         adder_input_b = 0;
       end else begin
         adder_input_b = O_W'(acc_pipe_q[0]);
       end
-    end else begin
-      adder_input_b = acc_pipe_q;
-    end
-    adder_input_b = snn_i ? O_W'(acc_pipe_q[0]) : acc_pipe_q;
-    adder_input_a = 0;
-    fired_o = 0;
-    // if in SNN mode
-    if (snn_i) begin
       // output weight bundle
       ns_data_out = '{
           signals:
@@ -191,6 +190,7 @@ module pe
         end
       end
     end else begin
+      // ANN mode
       // this is the same as b_i. I am using it because it suppresses lint
       // warning for not using _empty
       adder_input_b = ns_data_in;

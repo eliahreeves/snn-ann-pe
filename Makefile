@@ -18,7 +18,7 @@ SV2V_ARGS := $(shell \
 .PHONY: lint sim gls icestorm_icebreaker_gls icestorm_icebreaker_program icestorm_icebreaker_flash clean
 
 lint:
-	verilator lint/verilator.vlt -f rtl/rtl.f -f dv/dv.f --lint-only --top pe
+	verilator lint/verilator.vlt -f rtl/rtl.f -f dv/dv.f --lint-only --top array
 
 sim:
 	verilator lint/verilator.vlt --Mdir ${TOP}_$@_dir -f rtl/rtl.f -f dv/pre_synth.f -f dv/dv.f --binary -Wno-fatal --top ${TOP}

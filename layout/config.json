@@ -1,5 +1,5 @@
 {
-  "DESIGN_NAME": "array",
+  "DESIGN_NAME": "pe",
   "VERILOG_FILES": [
     "../synth/build/rtl.sv2v.v"
   ],

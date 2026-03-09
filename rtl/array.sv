@@ -25,23 +25,32 @@ module array
   // a_chain: flows vertically north-to-south through columns (gets dropped at bottom)
   // b_chain: flows horizontally west-to-east through rows (connects to output at right edge)
   // weight_chain: weight shift register chain (horizontal, left to right, wraps around rows)
-  logic [SIZE:0][SIZE-1:0][I_W-1:0] a_chain;  // [row][col] - extra row for outputs
+  /* verilator lint_off UNUSEDSIGNAL */
+  logic [SIZE:0][SIZE-1:0][I_W-1:0] a_chain;  // [row][col] - extra row for outputs (bottom dropped)
+  /* verilator lint_on UNUSEDSIGNAL */
   logic [SIZE-1:0][SIZE:0][O_W-1:0] b_chain;  // [row][col] - extra col for outputs
-  logic [SIZE-1:0][SIZE:0][I_W-1:0] weight_chain;
 
   // Weight registers - one per PE to store the loaded weight
   logic [SIZE-1:0][SIZE-1:0][I_W-1:0] weight_reg_q;
-  logic [SIZE-1:0][SIZE-1:0] fired;
 
   // Weight shift register chain logic
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       weight_reg_q <= '0;
     end else if (weight_load_en_i) begin
-      // Shift weights through the chain
-      for (int row = 0; row < SIZE; row++) begin
-        for (int col = 0; col < SIZE; col++) begin
-          weight_reg_q[row][col] <= weight_chain[row][col];
+      // Shift weights through the chain row-by-row
+      weight_reg_q[0][0] <= weight_shift_i;
+      // First row, remaining columns
+      for (int col = 1; col < SIZE; col++) begin
+        weight_reg_q[0][col] <= weight_reg_q[0][col-1];
+      end
+      // Remaining rows
+      for (int row = 1; row < SIZE; row++) begin
+        // First column of each row connects to last column of previous row
+        weight_reg_q[row][0] <= weight_reg_q[row-1][SIZE-1];
+        // Remaining columns
+        for (int col = 1; col < SIZE; col++) begin
+          weight_reg_q[row][col] <= weight_reg_q[row][col-1];
         end
       end
     end
@@ -59,26 +68,6 @@ module array
   generate
     for (row = 0; row < SIZE; row++) begin : gen_row_inputs
       assign b_chain[row][0] = b_i[(row+1)*O_W-1:row*O_W];
-    end
-  endgenerate
-
-  // Connect weight shift register chain
-  // Chain goes through row 0 left-to-right, then row 1 left-to-right, etc.
-  assign weight_chain[0][0] = weight_shift_i;
-
-  generate
-    for (row = 0; row < SIZE; row++) begin : gen_weight_chain_rows
-      for (col = 0; col < SIZE; col++) begin : gen_weight_chain_cols
-        if (row == 0 && col == 0) begin
-          // First PE: weight input already connected above
-        end else if (col == 0) begin
-          // First column: connect to last PE of previous row
-          assign weight_chain[row][0] = weight_chain[row-1][SIZE];
-        end else begin
-          // Middle/end of row: connect to previous PE in same row
-          assign weight_chain[row][col] = weight_chain[row][col-1];
-        end
-      end
     end
   endgenerate
 
@@ -101,12 +90,9 @@ module array
             .a_o       (a_chain[row+1][col]),     // To south (bottom) - dropped at end
             .b_i       (b_chain[row][col]),       // From west (left)
             .b_o       (b_chain[row][col+1]),     // To east (right) - output at end
-            .fired_o   (fired[row][col])          // Not connected at array level
+            .fired_o   ()                         // Not connected at array level
         );
         /* verilator lint_on PINCONNECTEMPTY */
-
-        // Connect weight shift register output to next PE in chain
-        assign weight_chain[row][col+1] = pe_inst.weight_i;
       end
     end
   endgenerate
