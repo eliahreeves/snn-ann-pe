@@ -1,0 +1,12 @@
+read_verilog synth/build/rtl.sv2v.v
+hierarchy -top pe_ann -check
+flatten
+proc; opt -full; fsm; opt -full; memory; opt -full
+dfflibmap -liberty $::env(SKY130_LIB)
+techmap; opt
+abc -liberty $::env(SKY130_LIB)
+clean
+opt -full
+write_verilog -noattr -noexpr synth/build/netlist_pe_ann.v
+write_json synth/build/netlist_pe_ann.json
+stat -liberty $::env(SKY130_LIB)

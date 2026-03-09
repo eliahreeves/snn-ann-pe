@@ -1,0 +1,8 @@
+{
+  "DESIGN_NAME": "array",
+  "VERILOG_FILES": [
+    "../synth/build/rtl.sv2v.v"
+  ],
+  "CLOCK_PERIOD": 25,
+  "CLOCK_PORT": "clk_i"
+}

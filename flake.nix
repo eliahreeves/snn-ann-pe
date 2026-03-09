@@ -15,8 +15,12 @@
       devShells.default = pkgs.mkShell {
         buildInputs = with pkgs; [
           gnumake
+          openroad
           verilator
           zlib
+          yosys
+          haskellPackages.sv2v
+          uv
         ];
       };
     });

@@ -1,53 +1,55 @@
 module pe
   import config_pkg::*;
 #(
-
     parameter MULT_STAGES = 3,
     parameter I_W = 8,
     parameter O_W = 32,
-    localparam TW = O_W / I_W,
-    localparam TW_WIDTH = $clog2(TW)
+    localparam TW = O_W / I_W
 ) (
     input logic clk_i,
     input logic rst_ni,
     input logic snn_i,
-    input logic [TW_WIDTH-1:0] cell_select_i,
     input logic [I_W-1:0] v_thresh_i,
     input logic [I_W-1:0] weight_i,
     // spikes/inputs
     input logic [I_W-1:0] a_i,
     output logic [I_W-1:0] a_o,
     //weights/outputs
-    input logic [O_W:0] b_i,
-    output logic [O_W:0] b_o,
+    input logic [O_W-1:0] b_i,
+    output logic [O_W-1:0] b_o,
 
     output logic fired_o
 );
+  typedef struct packed {
+    logic process;
+    logic flush;
+    logic first;
+  } ns_signals_t;
+
+  typedef struct packed {
+    ns_signals_t signals;
+    logic [O_W-I_W-4:0] _empty;
+    logic [I_W-1:0] weight;
+  } ns_data_t;
+
+  ns_data_t ns_data_in, ns_data_out;
+  assign ns_data_in = ns_data_t'(b_i);
+
   if (O_W % I_W != 0) $error("Input must be a multiple of output");
+  if (O_W - $bits(ns_data_in.signals) <= I_W) $error("at least 3 biots required for signals");
   if (MULT_STAGES <= 0) $error("At least one mult stage required");
 
   localparam MULT_OUT = I_W * 2;
 
-  typedef struct packed {logic [TW-1:0][I_W-1:0] cells;} snn_data_t;
-  typedef struct packed {
-    logic [O_W-I_W-1:0] _empty;
-    logic [I_W-1:0] weight;
-  } sum_weight_t;
-  typedef struct packed {
-    logic process;
-    sum_weight_t data;
-  } ns_data_t;
-  ns_data_t ns_data_in, ns_data_out;
-  assign ns_data_in = ns_data_t'(b_i);
   assign b_o = ns_data_out;
 
-  snn_data_t acc_d, acc_q;
+  logic [TW-1:0][I_W-1:0] acc_pipe_d, acc_pipe_q;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
-      acc_q <= 0;
+      acc_pipe_q <= 0;
     end else begin
-      acc_q <= acc_d;
+      acc_pipe_q <= acc_pipe_d;
     end
   end
 
@@ -82,13 +84,13 @@ module pe
   // dat ais flowing through MAC
   // *************************************************************
 
-  ns_data_t [TW-1:0] buffer_b_q;
+  logic [TW-1:0][I_W+$bits(ns_data_in.signals)-1:0] buffer_b_q;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       buffer_b_q <= '0;
     end else begin
-      buffer_b_q[0] <= ns_data_in;
+      buffer_b_q[0] <= {ns_data_in.signals, ns_data_in.weight};
       for (int i = 1; i < TW; i++) begin
         buffer_b_q[i] <= buffer_b_q[i-1];
       end
@@ -136,43 +138,65 @@ module pe
   // *************************************************************
 
   always_comb begin
-    acc_d = acc_q;
-    adder_input_b = acc_q;
+    acc_pipe_d = acc_pipe_q;
+    if (snn_i) begin
+      if (ns_data_in.signals.flush) begin
+        adder_input_b = 0;
+      end else begin
+        adder_input_b = O_W'(acc_pipe_q[0]);
+      end
+    end else begin
+      adder_input_b = acc_pipe_q;
+    end
+    adder_input_b = snn_i ? O_W'(acc_pipe_q[0]) : acc_pipe_q;
     adder_input_a = 0;
     fired_o = 0;
     // if in SNN mode
     if (snn_i) begin
       // output weight bundle
-      ns_data_out = buffer_b_q[TW-1];
+      ns_data_out = '{
+          signals:
+          ns_signals_t
+          '(
+          buffer_b_q[TW-1][$bits(buffer_b_q[0])-1:$bits(buffer_b_q[0])-$bits(ns_data_in.signals)]
+          ),
+          _empty: '0,
+          weight: buffer_b_q[TW-1][I_W-1:0]
+      };
+      // create a ring buffer
+      for (int i = 0; i < TW - 1; i++) begin
+        acc_pipe_d[i] = acc_pipe_q[i+1];
+      end
       // load sums into registers
-      if (~ns_data_in.process) begin
-        adder_input_a[I_W-1:0] = a_i[0] ? ns_data_in.data.weight : 0;
-        // if in integrate mode, accumulate and saturate
-        acc_d.cells[cell_select_i] = adder_output[I_W] == 0 ? adder_output[I_W-1:0] : {I_W{1'b1}};
+      if (~ns_data_in.signals.process) begin
+        adder_input_a[I_W-1:0] = a_i[0] ? ns_data_in.weight : 0;
+        // if in integrate mode, accumulate and saturate, write to tail since
+        // right now we are reading from the head
+        acc_pipe_d[TW-1] = (adder_output[I_W]) ? {I_W{1'b1}} : adder_output[I_W-1:0];
       end else begin
         // change b out to final cell when processing
-        ns_data_out.data.weight = acc_q.cells[TW-1];
-        adder_input_b = O_W'(acc_q.cells[cell_select_i]);
-        if (cell_select_i == 0) begin
-          adder_input_a[I_W-1:0] = ns_data_in.data.weight;
+        // adder_input_b = O_W'(acc_q.cells[cell_select_i]);
+        if (ns_data_in.signals.first) begin
+          ns_data_out.weight = acc_pipe_q[TW-1];
+          adder_input_a[I_W-1:0] = ns_data_in.weight;
         end else begin
-          adder_input_a[I_W-1:0] = acc_q.cells[cell_select_i-1];
+          adder_input_a[I_W-1:0] = acc_pipe_q[TW-1];
         end
 
         fired_o = adder_output[I_W:0] >= ((I_W + 1)'(v_thresh_i));
         if (fired_o) begin
-          acc_d.cells[cell_select_i] = 0;
+          acc_pipe_d[TW-1] = 0;
         end else begin
-          acc_d.cells[cell_select_i] = adder_output[I_W-1:0];
+          acc_pipe_d[TW-1] = adder_output[I_W-1:0];
         end
       end
     end else begin
-      // don't care about process
-      ns_data_out.process = 0;
-      adder_input_b = ns_data_in.data;
+      // this is the same as b_i. I am using it because it suppresses lint
+      // warning for not using _empty
+      adder_input_b = ns_data_in;
       adder_input_a = mult_out;
-      acc_d = adder_output;
-      ns_data_out.data = acc_q;
+      acc_pipe_d = adder_output;
+      ns_data_out = acc_pipe_q;
     end
   end
 endmodule
