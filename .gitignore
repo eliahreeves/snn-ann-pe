@@ -1,9 +1,13 @@
 .direnv
-layout/runs
+layout/hybrid/runs
+layout/snn/runs
+layout/ann/runs
 logs
 __pycache__
 *obj_dir
 *sim_dir
 *gls_dir
+gls_*_dir
 *.fst
+*.vcd
 build

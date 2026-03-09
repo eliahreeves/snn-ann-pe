@@ -2,8 +2,6 @@ dv/dv_pkg.sv
 dv/tb_pe_ann_random.sv
 dv/tb_pe_snn_random.sv
 
-dv/sky130_models.sv
-
 dv/pe_tb.sv
 
 dv/dpi/example_dpi.c
@@ -12,7 +10,7 @@ dv/dpi/example_dpi.c
 -j 0
 -Wall
 --assert
---trace-fst
+--trace
 --trace-structs
 --main-top-name "-"
 

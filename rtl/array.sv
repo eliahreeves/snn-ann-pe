@@ -2,8 +2,6 @@ module array
   import config_pkg::*;
 #(
     parameter MULT_STAGES = 3,
-    parameter I_W = 8,
-    parameter O_W = 32,
     parameter SIZE = 16
 ) (
     input logic clk_i,
@@ -77,9 +75,7 @@ module array
       for (col = 0; col < SIZE; col++) begin : gen_pe_cols
         /* verilator lint_off PINCONNECTEMPTY */
         pe #(
-            .MULT_STAGES(MULT_STAGES),
-            .I_W(I_W),
-            .O_W(O_W)
+            .MULT_STAGES(MULT_STAGES)
         ) pe_inst (
             .clk_i     (clk_i),
             .rst_ni    (rst_ni),

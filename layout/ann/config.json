@@ -1,0 +1,15 @@
+{
+  "DESIGN_NAME": "pe_ann",
+  "VERILOG_FILES": [
+    "../../synth/build/rtl.sv2v.v"
+  ],
+  "CLOCK_PERIOD": 8,
+  "CLOCK_PORT": "clk_i",
+  "PNR_SDC_FILE": "config.sdc",
+  "SIGNOFF_SDC_FILE": "config.sdc",
+  "FP_PIN_ORDER_CFG": "pin_order.cfg",
+  "FP_IO_HEXTEND": 2,
+  "FP_IO_VEXTEND": 2,
+  "RT_MAX_LAYER": "met4",
+  "FP_CORE_UTIL": 70
+}

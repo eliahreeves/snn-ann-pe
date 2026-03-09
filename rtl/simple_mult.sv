@@ -1,16 +1,16 @@
 module simple_mult
   import config_pkg::*;
 #(
-    parameter STAGES = 0,
-    parameter I_W = 8,
-    parameter MUL_W = 16
+    parameter STAGES = 0
 ) (
     input logic clk_i,
     input logic rst_ni,
     input logic [I_W-1:0] a_i,
     input logic [I_W-1:0] b_i,
-    output logic [MUL_W-1:0] c_o
+    output logic [I_W*2-1:0] c_o
 );
+  localparam MUL_W = I_W * 2;  // Multiplier output width
+  
   logic [STAGES-1:0][MUL_W-1:0] buff_q;  // Pipeline registers
   logic [ MUL_W-1:0]            prod_d;
 

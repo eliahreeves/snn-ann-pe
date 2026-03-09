@@ -1,10 +1,7 @@
 module pe
   import config_pkg::*;
 #(
-    parameter MULT_STAGES = 3,
-    parameter I_W = 8,
-    parameter O_W = 32,
-    localparam TW = O_W / I_W
+    parameter MULT_STAGES = 3
 ) (
     input logic clk_i,
     input logic rst_ni,
@@ -20,18 +17,6 @@ module pe
 
     output logic fired_o
 );
-  typedef struct packed {
-    logic process;
-    logic flush;
-    logic first;
-  } ns_signals_t;
-
-  typedef struct packed {
-    ns_signals_t signals;
-    logic [O_W-I_W-4:0] _empty;
-    logic [I_W-1:0] weight;
-  } ns_data_t;
-
   ns_data_t ns_data_in, ns_data_out;
   assign ns_data_in = ns_data_t'(b_i);
 
@@ -108,25 +93,32 @@ module pe
   assign adder_output = adder_input_b + O_W'(adder_input_a);
 
   // *************************************************************
-  // Multiplier
+  // Multiplier Clock Gating
   // *************************************************************
 
-  // logic en_ann;
-  // logic gated_clk;
-  // assign gated_clk = clk_i && en_ann;
-  //
-  // always_latch begin
-  //   if (!clk_i) begin
-  //     en_ann = !snn_i;
-  //   end
-  // end
+  // Gate the multiplier clock when in SNN mode
+  logic mult_clk_en;
+  logic mult_gated_clk;
+
+  assign mult_clk_en = !snn_i;  // Enable clock only in ANN mode
+
+  // SKY130 Integrated Clock Gating Cell
+  sky130_fd_sc_hd__dlclkp_1 icg_mult (
+      .CLK (clk_i),
+      .GATE(mult_clk_en),
+      .GCLK(mult_gated_clk)
+  );
+
+  // *************************************************************
+  // Multiplier
+  // *************************************************************
 
   logic [MULT_OUT-1:0] mult_out;
   // output valid after MULT_STAGES # of cycles have passed
   simple_mult #(
       .STAGES(MULT_STAGES)
   ) mult (
-      .clk_i(clk_i),
+      .clk_i(mult_gated_clk),
       .rst_ni(rst_ni),
       .a_i(snn_i ? a_i : 0),
       .b_i(weight_i),
